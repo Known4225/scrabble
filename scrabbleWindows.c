@@ -496,7 +496,7 @@ void mouseTick(scrabble *selfp) {
                 }
                 if (self.hover == H_BOARD) {
                     int pender = retrievePendingTile(&self, self.hoverPosition[0], self.hoverPosition[1]);
-                    printf("bX: %d bY: %d pend: %d\n", self.hoverPosition[0], self.hoverPosition[1], pender);
+                    // printf("bX: %d bY: %d pend: %d\n", self.hoverPosition[0], self.hoverPosition[1], pender);
                     if (pender != -1) {
                         self.mouseMode = M_PIECE;
                         self.mousePiece = self.pendingTiles -> data[pender].c;
@@ -516,7 +516,6 @@ void mouseTick(scrabble *selfp) {
                 }
                 if (self.hover == H_NONE) {
                     /* set drag constants */
-                    printf("drag\n");
                     self.mouseMode = M_DRAG;
                     self.focalX = self.mx;
                     self.focalY = self.my;
@@ -542,8 +541,8 @@ void mouseTick(scrabble *selfp) {
             }
             if (self.mouseMode == M_DRAG) {
                 /* drag screen */
-                self.sx = (self.mx - self.focalX) / self.ss + self.focalCSX;
-                self.sy = (self.my - self.focalY) / self.ss + self.focalCSY;
+                // self.sx = (self.mx - self.focalX) / self.ss + self.focalCSX;
+                // self.sy = (self.my - self.focalY) / self.ss + self.focalCSY;
             }
         }
     } else {
@@ -555,6 +554,7 @@ void mouseTick(scrabble *selfp) {
                     // keep mouse == piece
                     // printf("in place\n");
                 } else {
+                    // printf("dropped\n");
                     handleDrop(&self);
                 }
             }
@@ -697,12 +697,12 @@ int main(int argc, char *argv[]) {
     glfwWindowHint(GLFW_SAMPLES, 4); // MSAA (Anti-Aliasing) with 4 samples (must be done before window is created (?))
 
     /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(1280, 720, "Scrabble", NULL, NULL);
+    window = glfwCreateWindow(1920, 1080, "Scrabble", glfwGetPrimaryMonitor(), NULL);
     if (!window) {
         glfwTerminate();
     }
     glfwMakeContextCurrent(window);
-    glfwSetWindowSizeLimits(window, GLFW_DONT_CARE, GLFW_DONT_CARE, 1280, 720);
+    glfwSetWindowSizeLimits(window, GLFW_DONT_CARE, GLFW_DONT_CARE, 1920, 1080);
     gladLoadGL();
     /* load logo */
     GLFWimage icon;
@@ -759,7 +759,7 @@ int main(int argc, char *argv[]) {
         renderBoard(&self);
         mouseTick(&self);
         hotkeyTick(&self);
-        scrollTick(&self);
+        // scrollTick(&self);
         
         
         // ribbonDraw();
