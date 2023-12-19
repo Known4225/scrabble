@@ -14,12 +14,22 @@ extern inline double randomDouble(double lowerBound, double upperBound) { // ran
     return (rand() * (upperBound - lowerBound) / RAND_MAX + lowerBound); // probably works idk
 }
 
+enum hoverModeEnum {
+    H_NONE = 0,
+    H_BAR = 1,
+    H_BOARD = 2,
+};
+
+enum mouseModeEnum {
+    M_NONE = 0,
+    M_PIECE = 1,
+    M_DRAG = 2
+};
+
 typedef struct { // scrabble
     double c[24]; // color theme
     int cpt; // color select
-    double mx; // mouse x
-    double my; // mouse y
-    double mw; // mouse wheel
+    
     double scrollSpeed;
     list_t *allTiles; // all the tiles and point values
     list_t *bag; // the bag of tiles
@@ -30,8 +40,17 @@ typedef struct { // scrabble
     char boardSetup[225]; // board special values
     char board[225]; // board tiles
     char turn; // 0 for your turn, 1 for opponent's turn
-    signed char index; // what tile index you're holding
-    char holding; // what tile you're holding in your mouse
+
+    /* mouse functionality */
+    double mx; // mouse x
+    double my; // mouse y
+    double mw; // mouse wheel
+    char hover; // mouseHoverEnum
+    int hoverPosition[2]; // hover position, (-1, int) on bar, (x, y) on board
+    char mouseMode; // mouseModeEnum
+    char mousePiece; // character of piece holding
+    double mousePlace[2]; // raw coordinates
+    char shuffled; // prevent shuffling bar when it is not needed
 
     /* screen coordinates */
     double sx; // screenX
@@ -115,15 +134,24 @@ void resetGame(scrabble *selfp) {
     self.ss = 1;
     self.sx = 0;
     self.sy = 0;
-    self.boardX = -150;
+    self.boardX = -140;
     self.boardY = 150;
-    self.barX = -70;
+    self.barX = -60;
     self.barY = -160;
 
     /* scrabble */
     self.turn = 0;
-    self.index = -1;
-    self.holding = 0;
+    
+
+    /* mouse */
+    self.hover = H_NONE;
+    self.hoverPosition[0] = H_NONE;
+    self.hoverPosition[1] = H_NONE;
+    self.mouseMode = M_NONE;
+    self.mousePiece = M_NONE;
+    self.mousePlace[0] = M_NONE;
+    self.mousePlace[1] = M_NONE;
+    self.shuffled = 0;
 
     *selfp = self;
 }
@@ -169,6 +197,11 @@ void scrabbleInit(scrabble *selfp) {
     }; // the board
     memcpy(self.boardSetup, boardPlace, 225);
     self.scrollSpeed = 1.08;
+
+    /* keyboard */
+    for (int i = 0; i < 20; i++) {
+        self.keys[i] = 0;
+    }
     *selfp = self;
 }
 
@@ -178,6 +211,24 @@ int scrabbleLookup(scrabble *selfp, char letter) {
         return 0;
     }
     return selfp -> table[letter - 65];
+}
+
+/* retrieve the tile at the board position, returns 0 if not found */
+char retrieveTile(scrabble *selfp, int x, int y) {
+    if (selfp -> board[y * 15 + x] == 0) {
+        return -1;
+    }
+    return selfp -> board[y * 15 + x];
+}
+
+/* retrieve the pending tile at the board position, returns -1 if not found */
+char retrievePendingTile(scrabble *selfp, int x, int y) {
+    for (int i = 0; i < selfp -> pendingTiles -> length; i += 3) {
+        if (selfp -> pendingTiles -> data[i + 1].i == x && selfp -> pendingTiles -> data[i + 2].i == y) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 /* render a single tile */
@@ -282,47 +333,191 @@ void renderBoard(scrabble *selfp) {
     *selfp = self;
 }
 
-/* mouse motion */
+/* mouse functions */
+
+/* returns the integer aligned with the bar at the raw coordinates, -1 if not on bar */
+int onBar(scrabble *selfp, double x, double y) {
+    if (x > (selfp -> barX - 10 + selfp -> sx) * selfp -> ss && x < (selfp -> barX + 7 * 20 - 10 + selfp -> sx) * selfp -> ss &&
+        y > (selfp -> barY - 10 + selfp -> sy) * selfp -> ss && y < (selfp -> barY + 10 + selfp -> sy) * selfp -> ss) {
+            return round((x - (selfp -> barX + selfp -> sx) * selfp -> ss) / (20 * selfp -> ss));
+        }
+    return -1;
+}
+
+/* returns the integer aligned with the board at the raw coordinates, -1 if not on board */
+int onBoard(scrabble *selfp, double x, double y) {
+    if (x > (selfp -> boardX - 10 + selfp -> sx) * selfp -> ss && y < (selfp -> boardY + 10 + selfp -> sy) * selfp -> ss &&
+        x < (selfp -> boardX - 10 + 15 * 20 + selfp -> sx) * selfp -> ss && y > (selfp -> boardY + 10 - 15 * 20 + selfp -> sy) * selfp -> ss) {
+            int xpos = round((x - (selfp -> boardX + selfp -> sx) * selfp -> ss) / (20 * selfp -> ss));
+            int ypos = round(((selfp -> boardY + selfp -> sy) * selfp -> ss - y) / (20 * selfp -> ss));
+            return ypos * 15 + xpos;
+        }
+    return -1;
+}
+
+/* convert a (0 - 6) to a physical coordinate */
+double convertBarX(scrabble *selfp, int x) {
+    return (selfp -> barX + 20 * x + selfp -> sx) * selfp -> ss;
+}
+
+/* y position of bar */
+double convertBarY(scrabble *selfp, int y) {
+    return (selfp -> barY + selfp -> sy) * selfp -> ss; // it's always the same
+}
+
+/* convert a boardX (0 - 14) to a physical coordinate */
+double convertBoardX(scrabble *selfp, int x) {
+    return (selfp -> boardX + 20 * x + selfp -> sx) * selfp -> ss;
+}
+
+/* convert a boardY (0 - 14) to a physical coordinate */
+double convertBoardY(scrabble *selfp, int y) {
+    return (selfp -> boardY - 20 * y + selfp -> sx) * selfp -> ss;
+}
+
+/* return 1 if the mouse is within tile_size coordinates of the location (check if mouse in tile) */
+char mouseInPlace(scrabble *selfp, double x, double y) {
+    // printf("%lf %lf %lf %lf\n", fabs(x - selfp -> mx), fabs(y - selfp -> my));
+    if (fabs(x - selfp -> mx) > 10 * selfp -> ss || fabs(y - selfp -> my) > 10 * selfp -> ss) {
+        return 0;
+    }
+    return 1;
+}
+
+/* reorganise bar (left pad with a gap) */
+void shuffleBar(scrabble *selfp, int index) {
+    if (index == -1) {
+        if (selfp -> shuffled == 0) {
+            selfp -> shuffled = 1;
+            // left align the bar
+            char shuffle[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+            int next = 0;
+            for (int i = 0; i < 7; i++) {
+                if (selfp -> yourTiles[i] != 0) {
+                    shuffle[next] = selfp -> yourTiles[i];
+                    next++;
+                }
+            }
+            memcpy(selfp -> yourTiles, shuffle, 7);
+        }
+    } else {
+        // left align the bar but leave a 0 at index
+        selfp -> shuffled = 0;
+        char shuffle[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+        int next = 0;
+        for (int i = 0; i < 7; i++) {
+            if (selfp -> yourTiles[i] != 0) {
+                shuffle[next] = selfp -> yourTiles[i];
+                next++;
+            }
+        }
+        for (int i = next; i > index; i--) {
+            shuffle[i] = shuffle[i - 1];
+        }
+        shuffle[index] = 0;
+        memcpy(selfp -> yourTiles, shuffle, 7);
+    }
+}
+
+/* find first 0 in yourTiles */
+int findFirstIndex(scrabble *selfp) {
+    int first = 0;
+    for (int i = 0; i < 7; i++) {
+        if (selfp -> yourTiles[i] == 0) {
+            first = i;
+            break;
+        }
+    }
+    return first;
+}
+
+/* code when a piece is dropped or placed */
+void handleDrop(scrabble *selfp) {
+    if (selfp -> hover == H_BAR) {
+        // printf("barDrop\n");
+        selfp -> yourTiles[selfp -> hoverPosition[0]] = selfp -> mousePiece;
+    }
+    if (selfp -> hover == H_BOARD) {
+        // printf("boardDrop %d %d\n", retrieveTile(selfp, selfp -> hoverPosition[0], selfp -> hoverPosition[1]), retrievePendingTile(selfp, selfp -> hoverPosition[0], selfp -> hoverPosition[1]));
+        int pender = retrievePendingTile(selfp, selfp -> hoverPosition[0], selfp -> hoverPosition[1]);
+        if (retrieveTile(selfp, selfp -> hoverPosition[0], selfp -> hoverPosition[1]) != -1) {
+            selfp -> yourTiles[findFirstIndex(selfp)] = selfp -> mousePiece;
+        } else if (pender != -1) {
+            // replace pending tile with mousePiece
+            char temp = selfp -> pendingTiles -> data[pender].c;
+            selfp -> pendingTiles -> data[pender].c = selfp -> mousePiece;
+            selfp -> yourTiles[findFirstIndex(selfp)] = temp;
+        } else {
+            list_append(selfp -> pendingTiles, (unitype) selfp -> mousePiece, 'c');
+            list_append(selfp -> pendingTiles, (unitype) selfp -> hoverPosition[0], 'i');
+            list_append(selfp -> pendingTiles, (unitype) selfp -> hoverPosition[1], 'i');
+        }
+    }
+    if (selfp -> hover == H_NONE) {
+        selfp -> yourTiles[findFirstIndex(selfp)] = selfp -> mousePiece;
+    }
+    selfp -> mouseMode = M_NONE;
+    selfp -> mousePiece = M_NONE;
+    selfp -> mousePlace[0] = M_NONE;
+    selfp -> mousePlace[1] = M_NONE;
+}
+
+/* driver mouseTick */
 void mouseTick(scrabble *selfp) {
     scrabble self = *selfp;
+    self.hover = H_NONE;
+    int barCoord = onBar(&self, self.mx, self.my);
+    if (barCoord != -1) {
+        self.hover = H_BAR;
+        self.hoverPosition[0] = barCoord; // 0 - 6
+        self.hoverPosition[1] = -1; // there is no y position since bar is 1 dimensional
+    }
+    int boardCoord = onBoard(&self, self.mx, self.my);
+    if (boardCoord != -1) {
+        self.hoverPosition[0] = boardCoord % 15;
+        self.hoverPosition[1] = boardCoord / 15; // 0, 0 is top left
+        self.hover = H_BOARD;
+    }
+    // printf("hover: %d mouseMode: %d\n", self.hover, self.mouseMode);
     if (turtleMouseDown()) {
         if (self.keys[0] == 0) {
+            /* firstFrame */
+            // printf("firstFrame\n");
             self.keys[0] = 1;
-            /* check if mouse in bar */
-            if (self.turn == 0 &&
-            self.mx > (self.barX - 10 + self.sx) * self.ss && self.mx < (self.barX + 7 * 20 - 10 + self.sx) * self.ss &&
-            self.my > (self.barY - 10 + self.sy) * self.ss && self.my < (self.barY + 10 + self.sy) * self.ss) {
-                int ind = round((self.mx - (self.barX + self.sx) * self.ss) / (20 * self.ss));
-                // printf("index: %d\n", index);
-                if (self.yourTiles[ind] != 0) {
-                    self.index = ind;
-                    self.holding = self.yourTiles[ind];
-                    self.yourTiles[ind] = 0;
-                } else {
-                    self.focalX = self.mx;
-                    self.focalY = self.my;
-                    self.focalCSX = self.sx;
-                    self.focalCSY = self.sy;
-                }
+            if (self.mouseMode == M_PIECE) {
+                handleDrop(&self);
             } else {
-                if (self.index != -1) {
-                    if (self.mx > (self.boardX - 10 + self.sx) * self.ss && self.my < (self.boardY + 10 + self.sy) * self.ss &&
-                    self.mx < (self.boardX - 10 + 15 * 20 + self.sx) * self.ss && self.my > (self.boardY + 10 - 15 * 20 + self.sy) * self.ss) {
-                        int xpos = round((self.mx - (self.boardX + self.sx) * self.ss) / (20 * self.ss));
-                        int ypos = round(((self.boardY + self.sy) * self.ss - self.my) / (20 * self.ss));
-                        // printf("%d %d\n", xpos, ypos);
-                        // self.board[ypos * 15 + xpos] = self.holding;
-                        list_append(self.pendingTiles, (unitype) self.holding, 'c');
-                        list_append(self.pendingTiles, (unitype) xpos, 'i');
-                        list_append(self.pendingTiles, (unitype) ypos, 'i');
-                        self.index = -1;
-                        self.holding = 0;
+                if (self.hover == H_BAR) {
+                    self.mouseMode = M_PIECE;
+                    self.mousePiece = self.yourTiles[self.hoverPosition[0]];
+                    self.mousePlace[0] = convertBarX(&self, self.hoverPosition[0]);
+                    self.mousePlace[1] = convertBarY(&self, self.hoverPosition[1]);
+                    self.yourTiles[self.hoverPosition[0]] = 0;
+                }
+                if (self.hover == H_BOARD) {
+                    int pender = retrievePendingTile(&self, self.hoverPosition[0], self.hoverPosition[1]);
+                    printf("bX: %d bY: %d pend: %d\n", self.hoverPosition[0], self.hoverPosition[1], pender);
+                    if (pender != -1) {
+                        self.mouseMode = M_PIECE;
+                        self.mousePiece = self.pendingTiles -> data[pender].c;
+                        self.mousePlace[0] = convertBoardX(&self, self.hoverPosition[0]);
+                        self.mousePlace[1] = convertBoardY(&self, self.hoverPosition[1]);
+                        list_delete(self.pendingTiles, pender);
+                        list_delete(self.pendingTiles, pender);
+                        list_delete(self.pendingTiles, pender);
                     } else {
-                        self.yourTiles[self.index] = self.holding;
+                        /* set drag constants */
+                        self.mouseMode = M_DRAG;
+                        self.focalX = self.mx;
+                        self.focalY = self.my;
+                        self.focalCSX = self.sx;
+                        self.focalCSY = self.sy;
                     }
-                    self.index = -2;
-                    self.holding = 0;
-                } else {
+                }
+                if (self.hover == H_NONE) {
+                    /* set drag constants */
+                    printf("drag\n");
+                    self.mouseMode = M_DRAG;
                     self.focalX = self.mx;
                     self.focalY = self.my;
                     self.focalCSX = self.sx;
@@ -330,40 +525,66 @@ void mouseTick(scrabble *selfp) {
                 }
             }
         } else {
-            if (self.index == -1) {
+            if (self.mouseMode == M_PIECE) {
+                if (self.hover == H_BAR) {
+                    // printf("shuffle bar %d\n", self.hoverPosition[0]);
+                    // for (int i = 0; i < 7; i++) {
+                    //     printf("%d, ", self.yourTiles[i]);
+                    // }
+                    // printf("\n");
+                    shuffleBar(&self, self.hoverPosition[0]);
+                } else {
+                    shuffleBar(&self, -1);
+                }
+                if (self.hover == H_BOARD) {
+                    
+                }
+            }
+            if (self.mouseMode == M_DRAG) {
+                /* drag screen */
                 self.sx = (self.mx - self.focalX) / self.ss + self.focalCSX;
                 self.sy = (self.my - self.focalY) / self.ss + self.focalCSY;
             }
         }
     } else {
-        if (self.keys[0] != 0) {
-            if (self.index > -1 && (self.turn != 0 ||
-            self.my > (self.boardY + 10 - 15 * 20 + self.sy) * self.ss)) {
-                if (self.mx > (self.boardX - 10 + self.sx) * self.ss && self.my < (self.boardY + 10 + self.sy) * self.ss &&
-                self.mx < (self.boardX - 10 + 15 * 20 + self.sx) * self.ss && self.my > (self.boardY + 10 - 15 * 20 + self.sy) * self.ss) {
-                    int xpos = round((self.mx - (self.boardX + self.sx) * self.ss) / (20 * self.ss));
-                    int ypos = round(((self.boardY + self.sy) * self.ss - self.my) / (20 * self.ss));
-                    list_append(self.pendingTiles, (unitype) self.holding, 'c');
-                    list_append(self.pendingTiles, (unitype) xpos, 'i');
-                    list_append(self.pendingTiles, (unitype) ypos, 'i');
-                    self.index = -1;
-                    self.holding = 0;
-                } else {
-                    self.yourTiles[self.index] = self.holding;
-                }
-                self.holding = 0;
-                self.index = -1;
-            }
+        if (self.keys[0] == 1) {
+            /* firstFrame */
             self.keys[0] = 0;
+            if (self.mouseMode == M_PIECE) {
+                if (mouseInPlace(&self, self.mousePlace[0], self.mousePlace[1])) {
+                    // keep mouse == piece
+                    // printf("in place\n");
+                } else {
+                    handleDrop(&self);
+                }
+            }
+            if (self.mouseMode == M_DRAG) {
+                self.mouseMode = M_NONE;
+            }
+        } else {
+            if (self.mouseMode == M_PIECE) {
+                if (self.hover == H_BAR) {
+                    shuffleBar(&self, self.hoverPosition[0]);
+                } else {
+                    shuffleBar(&self, -1);
+                }
+            }
         }
     }
-    if (self.index > -1) {
-        if (self.mx > (self.boardX - 10 + self.sx) * self.ss && self.my < (self.boardY + 10 + self.sy) * self.ss &&
-        self.mx < (self.boardX - 10 + 15 * 20 + self.sx) * self.ss && self.my > (self.boardY + 10 - 15 * 20 + self.sy) * self.ss) {
-            renderTile(&self, round((self.mx / self.ss - self.sx - 10) / 20) * 20 + 10, round((self.my / self.ss - self.sy - 10) / 20) * 20 + 10, self.holding, 0);
-        } else {
-            renderTile(&self, self.mx / self.ss - self.sx, self.my / self.ss - self.sy, self.holding, 0);
+    if (self.mouseMode == M_PIECE) {
+        int renderCoords[2];
+        renderCoords[0] = self.mx / self.ss - self.sx;
+        renderCoords[1] = self.my / self.ss - self.sy;
+        if (self.hover == H_BAR) {
+            // renderCoords = lockPieceBar(mouseCoordinates);
+
         }
+        if (self.hover == H_BOARD) {
+            // renderCoords = lockPieceBoard(mouseCoordinates);
+            renderCoords[0] = round((self.mx / self.ss - self.sx) / 20) * 20;
+            renderCoords[1] = round((self.my / self.ss - self.sy - 10) / 20) * 20 + 10;
+        }
+        renderTile(&self, renderCoords[0], renderCoords[1], self.mousePiece, 0);
     }
     *selfp = self;
 }
