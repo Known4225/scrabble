@@ -1,9 +1,36 @@
+/*
+19.12.23:
+Ryan Srichai
+
+ToDo:
+Play button
+Words
+ - Newly placed tiles must be along one row or column
+ - Newly placed tiles must all be connected... kind of (difficult)
+ - List of all new words generated upon hitting submit button
+ - each word in the list is checked for validity
+ - if all words are valid, each word is scored
+Rendering
+ - Function to draw red boxes around squares
+ - Parameters: x, y, length, direction
+ - Words should be checked for validity in real time, and red boxes appear when a word is not valid
+Score render
+
+Enemy player
+ - generate all legal moves (how?)
+ - rank each move by score
+ 
+Additional enemy heuristics
+ - rank each move by number of tiles used
+
+
+*/
 #include "include/turtle.h"
 #include "include/ribbon.h"
 #include "include/win32Tools.h"
 #include <time.h>
 #define STB_IMAGE_IMPLEMENTATION
-#include "include/stb_image.h" // THANK YOU https://github.com/nothings/stb
+#include "include/stb_image.h" // THANK YOU https://github.com/nothings/stb (this is for glfw logo on window and in taskbar)
 /* scrabble dictionary from: https://github.com/zeisler/scrabble/blob/master/db/dictionary.csv */
 
 extern inline int randomInt(int lowerBound, int upperBound) { // random integer between lower and upper bound (inclusive)
