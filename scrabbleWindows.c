@@ -30,7 +30,8 @@ typedef struct { // scrabble
     char boardSetup[225]; // board special values
     char board[225]; // board tiles
     char turn; // 0 for your turn, 1 for opponent's turn
-    signed char holding; // what tile you're holding in your mouse
+    signed char index; // what tile index you're holding
+    char holding; // what tile you're holding in your mouse
 
     /* screen coordinates */
     double sx; // screenX
@@ -121,7 +122,8 @@ void resetGame(scrabble *selfp) {
 
     /* scrabble */
     self.turn = 0;
-    self.holding = -1;
+    self.index = -1;
+    self.holding = 0;
 
     *selfp = self;
 }
@@ -290,10 +292,12 @@ void mouseTick(scrabble *selfp) {
             if (self.turn == 0 &&
             self.mx > (self.barX - 10 + self.sx) * self.ss && self.mx < (self.barX + 7 * 20 - 10 + self.sx) * self.ss &&
             self.my > (self.barY - 10 + self.sy) * self.ss && self.my < (self.barY + 10 + self.sy) * self.ss) {
-                int index = round((self.mx - (self.barX + self.sx) * self.ss) / (20 * self.ss));
+                int ind = round((self.mx - (self.barX + self.sx) * self.ss) / (20 * self.ss));
                 // printf("index: %d\n", index);
-                if (self.yourTiles[index] != 0) {
-                    self.holding = index;
+                if (self.yourTiles[ind] != 0) {
+                    self.index = ind;
+                    self.holding = self.yourTiles[ind];
+                    self.yourTiles[ind] = 0;
                 } else {
                     self.focalX = self.mx;
                     self.focalY = self.my;
@@ -301,19 +305,23 @@ void mouseTick(scrabble *selfp) {
                     self.focalCSY = self.sy;
                 }
             } else {
-                if (self.holding != -1) {
+                if (self.index != -1) {
                     if (self.mx > (self.boardX - 10 + self.sx) * self.ss && self.my < (self.boardY + 10 + self.sy) * self.ss &&
                     self.mx < (self.boardX - 10 + 15 * 20 + self.sx) * self.ss && self.my > (self.boardY + 10 - 15 * 20 + self.sy) * self.ss) {
                         int xpos = round((self.mx - (self.boardX + self.sx) * self.ss) / (20 * self.ss));
                         int ypos = round(((self.boardY + self.sy) * self.ss - self.my) / (20 * self.ss));
                         // printf("%d %d\n", xpos, ypos);
-                        // self.board[ypos * 15 + xpos] = self.yourTiles[self.holding];
-                        list_append(self.pendingTiles, (unitype) self.yourTiles[self.holding], 'c');
+                        // self.board[ypos * 15 + xpos] = self.holding;
+                        list_append(self.pendingTiles, (unitype) self.holding, 'c');
                         list_append(self.pendingTiles, (unitype) xpos, 'i');
                         list_append(self.pendingTiles, (unitype) ypos, 'i');
-                        self.yourTiles[self.holding] = 0;
+                        self.index = -1;
+                        self.holding = 0;
+                    } else {
+                        self.yourTiles[self.index] = self.holding;
                     }
-                    self.holding = -2;
+                    self.index = -2;
+                    self.holding = 0;
                 } else {
                     self.focalX = self.mx;
                     self.focalY = self.my;
@@ -322,26 +330,39 @@ void mouseTick(scrabble *selfp) {
                 }
             }
         } else {
-            if (self.holding == -1) {
+            if (self.index == -1) {
                 self.sx = (self.mx - self.focalX) / self.ss + self.focalCSX;
                 self.sy = (self.my - self.focalY) / self.ss + self.focalCSY;
             }
         }
     } else {
         if (self.keys[0] != 0) {
-            if (self.turn != 0 ||
-            self.my > (self.boardY + 10 - 15 * 20 + self.sy) * self.ss) {
-                self.holding = -1;
+            if (self.index > -1 && (self.turn != 0 ||
+            self.my > (self.boardY + 10 - 15 * 20 + self.sy) * self.ss)) {
+                if (self.mx > (self.boardX - 10 + self.sx) * self.ss && self.my < (self.boardY + 10 + self.sy) * self.ss &&
+                self.mx < (self.boardX - 10 + 15 * 20 + self.sx) * self.ss && self.my > (self.boardY + 10 - 15 * 20 + self.sy) * self.ss) {
+                    int xpos = round((self.mx - (self.boardX + self.sx) * self.ss) / (20 * self.ss));
+                    int ypos = round(((self.boardY + self.sy) * self.ss - self.my) / (20 * self.ss));
+                    list_append(self.pendingTiles, (unitype) self.holding, 'c');
+                    list_append(self.pendingTiles, (unitype) xpos, 'i');
+                    list_append(self.pendingTiles, (unitype) ypos, 'i');
+                    self.index = -1;
+                    self.holding = 0;
+                } else {
+                    self.yourTiles[self.index] = self.holding;
+                }
+                self.holding = 0;
+                self.index = -1;
             }
             self.keys[0] = 0;
         }
     }
-    if (self.holding > -1) {
+    if (self.index > -1) {
         if (self.mx > (self.boardX - 10 + self.sx) * self.ss && self.my < (self.boardY + 10 + self.sy) * self.ss &&
         self.mx < (self.boardX - 10 + 15 * 20 + self.sx) * self.ss && self.my > (self.boardY + 10 - 15 * 20 + self.sy) * self.ss) {
-            renderTile(&self, round((self.mx / self.ss - self.sx - 10) / 20) * 20 + 10, round((self.my / self.ss - self.sy - 10) / 20) * 20 + 10, self.yourTiles[self.holding], 0);
+            renderTile(&self, round((self.mx / self.ss - self.sx - 10) / 20) * 20 + 10, round((self.my / self.ss - self.sy - 10) / 20) * 20 + 10, self.holding, 0);
         } else {
-            renderTile(&self, self.mx / self.ss - self.sx, self.my / self.ss - self.sy, self.yourTiles[self.holding], 0);
+            renderTile(&self, self.mx / self.ss - self.sx, self.my / self.ss - self.sy, self.holding, 0);
         }
     }
     *selfp = self;
