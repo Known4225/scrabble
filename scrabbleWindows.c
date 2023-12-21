@@ -78,6 +78,7 @@ typedef struct { // scrabble
     char mousePiece; // character of piece holding
     double mousePlace[2]; // raw coordinates
     char shuffled; // prevent shuffling bar when it is not needed
+    int prevMouse[4]; // for swapping pending tiles
 
     /* screen coordinates */
     double sx; // screenX
@@ -179,6 +180,7 @@ void resetGame(scrabble *selfp) {
     self.mousePlace[0] = M_NONE;
     self.mousePlace[1] = M_NONE;
     self.shuffled = 0;
+    self.prevMouse[0] = 0;
 
     *selfp = self;
 }
@@ -473,7 +475,15 @@ void handleDrop(scrabble *selfp) {
             // replace pending tile with mousePiece
             char temp = selfp -> pendingTiles -> data[pender].c;
             selfp -> pendingTiles -> data[pender].c = selfp -> mousePiece;
-            selfp -> yourTiles[findFirstIndex(selfp)] = temp;
+            if (selfp -> prevMouse[0] == 1) {
+                // swap with prevMouse
+                list_append(selfp -> pendingTiles, (unitype) temp, 'c');
+                list_append(selfp -> pendingTiles, (unitype) selfp -> prevMouse[2], 'i');
+                list_append(selfp -> pendingTiles, (unitype) selfp -> prevMouse[3], 'i');
+            } else {
+                // swap with bar piece
+                selfp -> yourTiles[findFirstIndex(selfp)] = temp;
+            }
         } else {
             list_append(selfp -> pendingTiles, (unitype) selfp -> mousePiece, 'c');
             list_append(selfp -> pendingTiles, (unitype) selfp -> hoverPosition[0], 'i');
@@ -515,6 +525,8 @@ void mouseTick(scrabble *selfp) {
                 handleDrop(&self);
             } else {
                 if (self.hover == H_BAR) {
+                    self.shuffled = 0;
+                    self.prevMouse[0] = 0;
                     self.mouseMode = M_PIECE;
                     self.mousePiece = self.yourTiles[self.hoverPosition[0]];
                     self.mousePlace[0] = convertBarX(&self, self.hoverPosition[0]);
@@ -529,11 +541,18 @@ void mouseTick(scrabble *selfp) {
                         self.mousePiece = self.pendingTiles -> data[pender].c;
                         self.mousePlace[0] = convertBoardX(&self, self.hoverPosition[0]);
                         self.mousePlace[1] = convertBoardY(&self, self.hoverPosition[1]);
+                        /* set prevMouse */
+                        self.prevMouse[0] = 1;
+                        self.prevMouse[1] = self.mousePiece;
+                        self.prevMouse[2] = self.pendingTiles -> data[pender + 1].i;
+                        self.prevMouse[3] = self.pendingTiles -> data[pender + 2].i;
+                        /* delete from pending tiles */
                         list_delete(self.pendingTiles, pender);
                         list_delete(self.pendingTiles, pender);
                         list_delete(self.pendingTiles, pender);
                     } else {
                         /* set drag constants */
+                        self.prevMouse[0] = 0;
                         self.mouseMode = M_DRAG;
                         self.focalX = self.mx;
                         self.focalY = self.my;
