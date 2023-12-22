@@ -54,7 +54,7 @@ enum mouseModeEnum {
 };
 
 typedef struct { // scrabble
-    double c[24]; // color theme
+    double c[27]; // color theme
     int cpt; // color select
     
     double scrollSpeed;
@@ -187,7 +187,7 @@ void resetGame(scrabble *selfp) {
 
 void scrabbleInit(scrabble *selfp) {
     scrabble self = *selfp;
-    double initColors[24] = {
+    double initColors[27] = {
         125, 101, 81, // background color (brown)
         255, 216, 156, // tile color (lighter brown)
         198, 141, 99, // alt tile color (darker)
@@ -195,9 +195,10 @@ void scrabbleInit(scrabble *selfp) {
         80, 133, 198, // double letter (light blue)
         1, 55, 162, // triple letter (dark blue)
         174, 38, 48, // double word (red)
-        217, 68, 46 // triple word (orange)
+        217, 68, 46, // triple word (orange)
+        255, 0, 0 // outline color (red)
     };
-    memcpy(self.c, initColors, sizeof(double) * 24);
+    memcpy(self.c, initColors, sizeof(double) * 27);
     self.cpt = 0;
     turtleBgColor(self.c[self.cpt], self.c[self.cpt + 1], self.c[self.cpt + 2]);
     self.allTiles = list_init(); // initialise list
@@ -360,6 +361,47 @@ void renderBoard(scrabble *selfp) {
     }
 
     *selfp = self;
+}
+
+/* renders a red outline around tiles */
+void renderOutline(scrabble *selfp, int x, int y, int dir, int len) {
+    /* direction:
+    0 - up
+    1 - right
+    2 - down
+    3 - left */
+    scrabble self = *selfp;
+    int deltaX;
+    int deltaY;
+    switch (dir) {
+        case 0:
+        deltaX = 0;
+        deltaY = 1;
+        break;
+        case 1:
+        deltaX = 1;
+        deltaY = 0;
+        break;
+        case 2:
+        deltaX = 0;
+        deltaY = -1;
+        break;
+        case 3:
+        deltaX = -1;
+        deltaY = 0;
+        break;
+        default:
+    }
+    double gotoX = (self.boardX + 20 * (x - 0.5 * deltaX - 0.5 * deltaY) + self.sx) * self.ss;
+    double gotoY = (self.boardY - 20 * (y + 0.5 * deltaY - 0.5 * deltaX) + self.sy) * self.ss;
+    turtlePenColor(self.c[self.cpt + 24], self.c[self.cpt + 25], self.c[self.cpt + 26]);
+    turtlePenSize(self.ss * 5);
+    turtleGoto(gotoX, gotoY);
+    turtlePenDown();
+    gotoX += (20 * (len + 1) * deltaX) * self.ss;
+    gotoY += (20 * (len + 1) * deltaY) * self.ss;
+    turtleGoto(gotoX, gotoY);
+    turtlePenUp();
 }
 
 /* mouse functions */
@@ -544,7 +586,7 @@ void mouseTick(scrabble *selfp) {
                         /* set prevMouse */
                         self.prevMouse[0] = 1;
                         self.prevMouse[1] = self.mousePiece;
-                        self.prevMouse[2] = self.pendingTiles -> data[pender + 1].i;
+                        self.prevMouse[2] = self.pendingTiles -> data[pender + 1].i; 
                         self.prevMouse[3] = self.pendingTiles -> data[pender + 2].i;
                         /* delete from pending tiles */
                         list_delete(self.pendingTiles, pender);
@@ -587,8 +629,8 @@ void mouseTick(scrabble *selfp) {
             }
             if (self.mouseMode == M_DRAG) {
                 /* drag screen */
-                // self.sx = (self.mx - self.focalX) / self.ss + self.focalCSX;
-                // self.sy = (self.my - self.focalY) / self.ss + self.focalCSY;
+                self.sx = (self.mx - self.focalX) / self.ss + self.focalCSX;
+                self.sy = (self.my - self.focalY) / self.ss + self.focalCSY;
             }
         }
     } else {
@@ -803,9 +845,10 @@ int main(int argc, char *argv[]) {
         turtleClear();
         renderBar(&self);
         renderBoard(&self);
+        renderOutline(&self, 7, 7, 3, 4);
         mouseTick(&self);
         hotkeyTick(&self);
-        // scrollTick(&self);
+        scrollTick(&self);
         
         
         // ribbonDraw();

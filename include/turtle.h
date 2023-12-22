@@ -15,6 +15,11 @@ keyboard and mouse presses
 #include "glfw3.h"
 #include "list.h"
 
+void extern glBegin(int);
+void extern glEnd();
+void extern glVertex2d(double, double);
+void extern glColor4d(double, double, double, double);
+
 typedef struct {
     GLFWwindow* window; // the window
     char close;
@@ -486,7 +491,7 @@ void turtleQuadAlpha(double x1, double y1, double x2, double y2, double x3, doub
     list_append(turtle.penPos, (unitype) y4, 'd');
 }
 /* draws the turtle's path on the screen */
-void turtleUpdate() {
+void turtleUpdate() { // draws the turtle's path on the screen
     char changed = 0;
     int len = turtle.penPos -> length;
     unitype *ren = turtle.penPos -> data;
@@ -523,6 +528,7 @@ void turtleUpdate() {
         yfact = 1 / yfact;
         double lastSize = -1;
         double lastPrez = -1;
+        int lastBlit = 67;
         double precomputedLog = 5;
         glClear(GL_COLOR_BUFFER_BIT);
         for (int i = 0; i < len; i += 9) {
@@ -542,13 +548,15 @@ void turtleUpdate() {
                     turtleTriangleRender(ren[i].d - ren[i + 2].d, ren[i + 1].d - ren[i + 2].d, ren[i].d + ren[i + 2].d, ren[i + 1].d - ren[i + 2].d, ren[i].d, ren[i + 1].d + ren[i + 2].d, ren[i + 3].d, ren[i + 4].d, ren[i + 5].d, ren[i + 6].d, xfact, yfact);
                     break;
                     case 5:
-                    if (i - 9 < 0 || renType[i - 9] == 'c') {
+                    if (i - 9 < 0 || renType[i - 9] == 'c' || (lastBlit > 63 && lastBlit < 68)) {
                         if (!(lastSize == ren[i + 2].d) || !(lastPrez != ren[i + 8].d))
                             precomputedLog = ren[i + 8].d * log(2.71 + ren[i + 2].d);
                         lastSize = ren[i + 2].d;
                         lastPrez = ren[i + 8].d;
                         turtleCircleRender(ren[i].d, ren[i + 1].d, ren[i + 2].d, ren[i + 3].d, ren[i + 4].d, ren[i + 5].d, ren[i + 6].d, xfact, yfact, precomputedLog);
                     }
+                    break;
+                    default:
                     break;
                 }
                 if (i + 9 < len && renType[i + 9] == 'd' && ren[i + 7].h < 64 && (ren[i + 7].h == 4 || ren[i + 7].h == 5 || (fabs(ren[i].d - ren[i + 9].d) > ren[i + 2].d / 2 || fabs(ren[i + 1].d - ren[i + 10].d) > ren[i + 2].d / 2))) { // tests for next point continuity and also ensures that the next point is at sufficiently different coordinates
@@ -591,6 +599,7 @@ void turtleUpdate() {
                     i += 9;
                 }
             }
+            lastBlit = ren[i + 7].h;
         }
         glfwSwapBuffers(turtle.window);
     }

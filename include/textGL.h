@@ -249,7 +249,7 @@ double textGLGetLength(const unsigned int *text, int textLength, double size) { 
     return xTrack;
 }
 
-double textGLGetStringLength(const char *str, int textLength, double size) { // gets the length of a string in pixels on the screen
+double textGLGetStringLength(const char *str, double size) { // gets the length of a string in pixels on the screen
     int len = strlen(str);
     unsigned int converted[len];
     for (int i = 0; i < len; i++) {
@@ -258,7 +258,7 @@ double textGLGetStringLength(const char *str, int textLength, double size) { // 
     return textGLGetLength(converted, len, size);
 }
 
-double textGLGetUnicodeLength(const char *str, int textLength, double size) { // gets the length of a u-string in pixels on the screen
+double textGLGetUnicodeLength(const char *str, double size) { // gets the length of a u-string in pixels on the screen
     int len = strlen((char *) str);
     unsigned int converted[len]; // max number of characters in a utf-8 string of length len
     int byteLength;
@@ -298,10 +298,10 @@ void textGLWrite(const unsigned int *text, int textLength, double x, double y, d
     double xTrack = x;
     size /= 175;
     y -= size * 70;
-    turtlePenSize(textGLRender.weight * size);
+    turtlePenSize(size * textGLRender.weight);
     // turtlePenShape("connected"); // fast
-    turtlePenShape("circle"); // pretty
-    // turtlePenShape("text"); // dedicated setting that blends circle and connected
+    // turtlePenShape("circle"); // pretty
+    turtlePenShape("text"); // dedicated setting that blends circle and connected
     list_t* xvals = list_init();
     list_t* dataIndStored = list_init();
     for (int i = 0; i < textLength; i++) {
