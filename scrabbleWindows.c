@@ -23,7 +23,9 @@ Enemy player
 Additional enemy heuristics
  - rank each move by number of tiles used
 
-
+Bug:
+Sometimes tiles disappear if you drag them too fast in the hotbar
+Also I want to fix it dragging when I am trying to click it and move it. Maybe add an exception for the hotbar that allows it to go upward slightly
 */
 #include "include/turtle.h"
 #include "include/ribbon.h"
@@ -288,7 +290,7 @@ void renderTile(scrabble *selfp, double x, double y, char letter, int col) {
     textGLSetWeight(30);
     textGLWriteString(toWrite, (x + selfp -> sx) * selfp -> ss, (y + selfp -> sy) * selfp -> ss, 10 * selfp -> ss, 50);
     if (value != 0) {
-        itoa(value, toWrite, 10);
+        sprintf(toWrite, "%d", value);
         textGLWriteString(toWrite, (x + 7 + selfp -> sx) * selfp -> ss, (y - 6 + selfp -> sy) * selfp -> ss, 4 * selfp -> ss, 100);
     }
     textGLSetWeight(20);
@@ -391,6 +393,7 @@ void renderOutline(scrabble *selfp, int x, int y, int dir, int len) {
         deltaY = 0;
         break;
         default:
+        break;
     }
     double gotoX = (self.boardX + 20 * (x - 0.5 * deltaX - 0.5 * deltaY) + self.sx) * self.ss;
     double gotoY = (self.boardY - 20 * (y + 0.5 * deltaY - 0.5 * deltaX) + self.sy) * self.ss;
